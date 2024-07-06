@@ -228,8 +228,8 @@ exports.updatePassagewLogTime = async (req, res) => {
 };
 
 const columnsToKeep = ['student_id',  'instituteId', 'batchNo', 'batchdate',
-    'fullname', 'subjectsId', 'courseId', 'batch_year', 'loggedin', 'done',
-    'PHOTO', 'center', 'reporting_Time', 'start_time', 'end_time', 'DAY',
+    'fullname', 'subjectId', 'courseId', 'batch_year', 'loggedin', 'done',
+    'PHOTO', 'center', 'reporting_time', 'start_time', 'end_time', 'DAY',
     'qset']
 
 const columnsToKeepsub =['subjectId', 'courseId', 'subject_name', 'subject_name_short',
@@ -242,6 +242,8 @@ const columnsToKeepcontroller =  ['center', 'batchNo', 'controller_code', 'contr
 const columnsToKeepcenter =  ['center',  'center_name', 'center_address', 'pc_count',
     'max_pc', 'attendanceroll', 'absenteereport', 'answersheet',
     'blankanswersheet']
+
+    
 exports.getStudentDetails = async (req, res) => {
     // Assuming studentId is stored in the session
     const studentId = req.session.studentId;

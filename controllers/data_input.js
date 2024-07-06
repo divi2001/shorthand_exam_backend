@@ -1,6 +1,9 @@
 const fs = require('fs');
 const fastCsv = require('fast-csv');
 const pool = require("../config/db1");
+const schema = require('../schema/schema');
+const moment = require('moment');
+
 
 exports.importCSV = async (req, res) => {
   if (!req.file) {
@@ -31,8 +34,11 @@ exports.importCSV = async (req, res) => {
     });
 
     const createTableQuery = `CREATE TABLE IF NOT EXISTS ?? (
-      ${columns.map(column => `\`${column}\` LONGTEXT`).join(', ')}
-    )`;
+      ${columns.map(column => {
+        const fieldType = schema[tableName] && schema[tableName][column] ? schema[tableName][column] : 'LONGTEXT';
+        return `\`${column}\` ${fieldType}`;
+      }).join(', ')}
+    )`
 
     const connection = await pool.getConnection();
     await connection.beginTransaction();
@@ -84,14 +90,46 @@ exports.importCSV = async (req, res) => {
 async function insertChunk(connection, tableName, columns, chunk) {
   const insertQuery = `INSERT INTO ?? (${columns.map(column => `\`${column}\``).join(', ')}) VALUES ?`;
   const values = chunk.map(row => {
-    const rowValues = columns.map(column => row[column]);
-    // Log the size of the 'image' column data for diagnostic purposes
-    rowValues.forEach((value, index) => {
-      if (columns[index] === 'image' && value) {
-        console.log(`Size of image data: ${Buffer.byteLength(value, 'utf8')} bytes`);
+    const rowValues = columns.map(column => {
+      let value = row[column];
+      const fieldType = schema[tableName] && schema[tableName][column];
+
+      // Process courseId and subjectId columns
+      if (column === 'courseId' || column === 'subjectId') {
+        if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
+          value = parseInt(value.replace(/[\[\]\s]/g, ''), 10);
+        }
+      }
+
+      // Process loggedin and done columns
+      if (column === 'loggedin' || column === 'done') {
+        return value && (value.toLowerCase() === 'yes' || value.toLowerCase() === 'true' || value === '1');
+      }
+
+      // Process time columns
+      if (fieldType === 'TIME') {
+        if (value) {
+          const time = moment(value, ['h:mm A', 'HH:mm']);
+          return time.isValid() ? time.format('HH:mm:ss') : null;
+        }
+        return null;
+      }
+
+      if (fieldType === 'BOOLEAN') {
+        return value && (value.toLowerCase() === 'yes' || value.toLowerCase() === 'true' || value === '1');
+      } else if (fieldType === 'INT' || fieldType === 'BIGINT') {
+        return isNaN(parseInt(value, 10)) ? null : parseInt(value, 10);
+      } else if (fieldType === 'DECIMAL') {
+        return isNaN(parseFloat(value)) ? null : parseFloat(value);
+      } else if (fieldType === 'DATE') {
+        return value ? new Date(value) : null;
+      } else if (fieldType === 'TIMESTAMP') {
+        return value ? new Date(value) : null;
+      } else {
+        return value;
       }
     });
     return rowValues;
   });
   await connection.query(insertQuery, [tableName, values]);
-}  
+}

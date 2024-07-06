@@ -1,12 +1,14 @@
 import os
 import mysql.connector
 import json
+import subprocess
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 from dotenv import load_dotenv
 import base64
 import csv
+import hashlib
 
 load_dotenv()
 
@@ -15,20 +17,21 @@ DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_DATABASE = os.getenv('DB_DATABASE')
 SECRET_KEY = os.getenv('SECRET_KEY')
-
-import hashlib
+SCHEMA_FILE = os.getenv('SCHEMA_FILE', 'schema/schema.js')
 
 def ensure_key_length(key, desired_length=32):
     hasher = hashlib.sha256()
-    hasher.update(key.encode())  # Ensure key is being hashed directly from the string
+    hasher.update(key.encode())
     return hasher.digest()[:desired_length]
+
+def derive_key(secret_key):
+    return hashlib.sha256(secret_key.encode()).digest()[:32]
 
 def encrypt(obj):
     plain_text = json.dumps(obj)
-    iv = os.urandom(16)  # Initialization vector for CBC mode
+    iv = os.urandom(16)
 
-    # Ensure the key is of the correct length
-    key = base64.b64decode(SECRET_KEY)
+    key = derive_key(SECRET_KEY)
     key = ensure_key_length(SECRET_KEY)
 
     backend = default_backend()
@@ -53,8 +56,7 @@ def decrypt(encrypted_text):
     iv = base64.b64decode(iv_hex)
     encrypted_data = base64.b64decode(encrypted_hex)
 
-    # Ensure the key is of the correct length
-    key = base64.b64decode(SECRET_KEY)
+    key = derive_key(SECRET_KEY)
     key = ensure_key_length(key)
 
     backend = default_backend()
@@ -71,7 +73,36 @@ def decrypt(encrypted_text):
     except json.JSONDecodeError:
         return decrypted_text
 
-def upload_center_data(csv_file):
+def load_schema(schema_file):
+    try:
+        result = subprocess.run(['node', '-e', f"console.log(JSON.stringify(require('./{schema_file}')));"], capture_output=True, text=True)
+        schema = json.loads(result.stdout)
+        return schema
+    except Exception as e:
+        print(f"Error loading schema: {e}")
+        return {}
+
+def ensure_table_exists(connection, schema, table_name):
+    table_schema = schema.get(table_name)
+    if not table_schema:
+        print(f"No schema found for table: {table_name}")
+        return
+    
+    fields = ', '.join([f"{field} {dtype}" for field, dtype in table_schema.items()])
+    create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({fields})"
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute(create_table_query)
+        connection.commit()
+        print(f"Table '{table_name}' checked/created successfully.")
+    except mysql.connector.Error as err:
+        print(f"Error creating table '{table_name}': {err}")
+    finally:
+        cursor.close()
+
+def upload_center_data(csv_file, schema_file):
+    schema = load_schema(schema_file)
     try:
         connection = mysql.connector.connect(
             host=DB_HOST,
@@ -79,21 +110,19 @@ def upload_center_data(csv_file):
             password=DB_PASSWORD,
             database=DB_DATABASE
         )
+        table_name = 'examcenterdb'
+        ensure_table_exists(connection, schema, table_name)
+
         cursor = connection.cursor()
 
-        # Read the CSV file and parse its contents
         with open(csv_file, 'r') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                # Encrypt the centerpass value
                 encrypted_centerpass = encrypt(row['centerpass'])
-
-                # Update the centerpass value in the row with the encrypted value
                 row['centerpass'] = encrypted_centerpass
 
-                # Insert the updated row into the MySQL database
-                query = """
-                    INSERT INTO examcenterdb (center, centerpass, center_name, center_address, pc_count, max_pc)
+                query = f"""
+                    INSERT INTO {table_name} (center, centerpass, center_name, center_address, pc_count, max_pc)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 """
                 values = (
@@ -115,6 +144,5 @@ def upload_center_data(csv_file):
             cursor.close()
             connection.close()
 
-# Example usage
-csv_file_path = 'finalstu - examcenterdb.csv'
-upload_center_data(csv_file_path)
+csv_file_path = 'examcenterdb.csv'
+upload_center_data(csv_file_path, SCHEMA_FILE)
