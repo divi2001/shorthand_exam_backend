@@ -86,11 +86,11 @@ const schema = {
         district: 'VARCHAR(100)'
     },
     pcregistration: {
-        id: 'INT PRIMARY KEY',
-        center: 'INT REFERENCES examcenterdb(center)',
-        ip_address: 'VARCHAR(50)',
-        disk_id: 'VARCHAR(100)',
-        mac_address: 'VARCHAR(50)'
+        id: 'INT AUTO_INCREMENT PRIMARY KEY',
+        center: 'INT NOT NULL REFERENCES examcenterdb(center)',
+        ip_address: 'LONGTEXT NOT NULL',
+        disk_id: 'LONGTEXT NOT NULL',
+        mac_address: 'LONGTEXT NOT NULL'
     },
     audiodb: {
         id: 'INT PRIMARY KEY',

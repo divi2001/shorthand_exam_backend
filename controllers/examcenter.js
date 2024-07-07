@@ -19,14 +19,14 @@ exports.loginCenter = async (req, res) => {
         console.log("Ensuring pcregistration table exists");
         // Ensure pcregistration table exists
         const createTableQuery = `
-            CREATE TABLE IF NOT EXISTS pcregistration (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                center VARCHAR(255) NOT NULL,
-                ip_address VARCHAR(255) NOT NULL,
-                disk_id VARCHAR(255) NOT NULL,
-                mac_address VARCHAR(255) NOT NULL
-            )
-        `;
+        CREATE TABLE IF NOT EXISTS pcregistration (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            center INT NOT NULL,
+            ip_address LONGTEXT NOT NULL,
+            disk_id LONGTEXT NOT NULL,
+            mac_address LONGTEXT NOT NULL
+        )
+    `;
         await connection.query(createTableQuery);
         console.log("pcregistration table ensured");
 
