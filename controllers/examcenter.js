@@ -7,6 +7,43 @@ const archiver = require('archiver');
 const moment = require('moment-timezone');
 const { encrypt, decrypt } = require('../config/encrypt');
 const { request } = require('http');
+const schema = require('../schema/schema');
+
+function generateCreateTableQuery(tableName) {
+    if (!schema[tableName]) {
+        throw new Error(`Table "${tableName}" not found in schema`);
+    }
+
+    const fields = Object.entries(schema[tableName])
+        .map(([fieldName, fieldType]) => `${fieldName} ${fieldType}`)
+        .join(', ');
+
+    return `
+        CREATE TABLE IF NOT EXISTS ${tableName} (
+            ${fields}
+        )
+    `;
+}
+
+function generateSelectQuery(tableName, conditions = {}) {
+    const whereClause = Object.keys(conditions).length > 0
+        ? `WHERE ${Object.keys(conditions).map(key => `${key} = ?`).join(' AND ')}`
+        : '';
+    return `SELECT * FROM ${tableName} ${whereClause}`;
+}
+
+function generateInsertQuery(tableName, data) {
+    const fields = Object.keys(data).join(', ');
+    const placeholders = Object.keys(data).map(() => '?').join(', ');
+    return `INSERT INTO ${tableName} (${fields}) VALUES (${placeholders})`;
+}
+
+function generateCountQuery(tableName, conditions = {}) {
+    const whereClause = Object.keys(conditions).length > 0
+        ? `WHERE ${Object.keys(conditions).map(key => `${key} = ?`).join(' AND ')}`
+        : '';
+    return `SELECT COUNT(*) AS count FROM ${tableName} ${whereClause}`;
+}
 
 exports.loginCenter = async (req, res) => {
     console.log("Trying center login");
@@ -18,20 +55,15 @@ exports.loginCenter = async (req, res) => {
     try {
         console.log("Ensuring pcregistration table exists");
         // Ensure pcregistration table exists
-        const createTableQuery = `
-        CREATE TABLE IF NOT EXISTS pcregistration (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            center INT NOT NULL,
-            ip_address LONGTEXT NOT NULL,
-            disk_id LONGTEXT NOT NULL,
-            mac_address LONGTEXT NOT NULL
-        )
-    `;
+        const createTableQuery = generateCreateTableQuery('pcregistration');
+
         await connection.query(createTableQuery);
         console.log("pcregistration table ensured");
 
         console.log("Querying examcenterdb for centerId");
+        const selectCenterQuery = generateSelectQuery('examcenterdb', { center: centerId });
         const [results] = await connection.query(query1, [centerId]);
+
         if (results.length > 0) {
             const center = results[0];
             console.log(`Center found: ${JSON.stringify(center)}`);
@@ -55,16 +87,19 @@ exports.loginCenter = async (req, res) => {
             console.log(`Comparing passwords - stored: '${decryptedStoredCenterPassStr}', provided: '${providedCenterPassStr}'`);
             if (decryptedStoredCenterPassStr === providedCenterPassStr) {
                 console.log("Passwords match");
-
+    
                 // Check if the PC is already registered
-                const checkPcQuery = `
-                    SELECT COUNT(*) AS pcExists FROM pcregistration 
-                    WHERE center = ? AND ip_address = ? AND disk_id = ? AND mac_address = ?
-                `;
+                const checkPcQuery = generateCountQuery('pcregistration', { 
+                    center: centerId, 
+                    ip_address: ipAddress, 
+                    disk_id: diskIdentifier, 
+                    mac_address: macAddress 
+                });
+    
                 console.log("Checking if the PC is already registered");
                 const [checkPcResults] = await connection.query(checkPcQuery, [centerId, ipAddress, diskIdentifier, macAddress]);
-                const pcExists = checkPcResults[0].pcExists;
-
+                const pcExists = checkPcResults[0].count; // Change this line
+    
                 if (pcExists > 0) {
                     console.log("PC is already registered for the center");
                     res.status(403).send('This PC is already registered for the center');
@@ -74,13 +109,13 @@ exports.loginCenter = async (req, res) => {
                 console.log("PC is not already registered");
 
                 // Check the number of registered PCs for the center
-                const countQuery = 'SELECT COUNT(*) AS pcCount FROM pcregistration WHERE center = ?';
+                const countQuery = generateCountQuery('pcregistration', { center: centerId });
                 console.log("Checking the number of registered PCs for the center");
                 const [countResults] = await connection.query(countQuery, [centerId]);
-                const pcCount = countResults[0].pcCount;
+                const pcCount = countResults[0].count;
 
                 // Get the maximum allowed PCs for the center
-                const maxPcQuery = 'SELECT max_pc FROM examcenterdb WHERE center = ?';
+                const maxPcQuery = generateSelectQuery('examcenterdb', { center: centerId });
                 console.log("Getting the maximum allowed PCs for the center");
                 const [maxPcResults] = await connection.query(maxPcQuery, [centerId]);
                 const maxPcCount = maxPcResults[0].max_pc;
@@ -89,10 +124,12 @@ exports.loginCenter = async (req, res) => {
                 if (pcCount < maxPcCount) {
                     console.log("Registering new PC");
                     // Insert PC registration log
-                    const insertLogQuery = `
-                        INSERT INTO pcregistration (center, ip_address, disk_id, mac_address)
-                        VALUES (?, ?, ?, ?)
-                    `;
+                    const insertLogQuery = generateInsertQuery('pcregistration', {
+                        center: centerId,
+                        ip_address: ipAddress,
+                        disk_id: diskIdentifier,
+                        mac_address: macAddress
+                    });
                     await connection.query(insertLogQuery, [centerId, ipAddress, diskIdentifier, macAddress]);
                     console.log("PC registered successfully");
                     res.status(200).send('PC registered successfully for the center!');
