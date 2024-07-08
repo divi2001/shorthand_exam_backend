@@ -1,23 +1,14 @@
 const connection = require('../config/db1');
-const xl = require('excel4node');
-const path = require('path');
-const fs = require('fs').promises;
-const Buffer = require('buffer').Buffer;
-const archiver = require('archiver');
-const moment = require('moment-timezone');
-const { encrypt, decrypt } = require('../config/encrypt');
-const { request } = require('http');
 const schema = require('../schema/schema');
+const { encrypt, decrypt } = require('../config/encrypt'); // Importing the encrypt and decrypt functions
 
 function generateCreateTableQuery(tableName) {
     if (!schema[tableName]) {
         throw new Error(`Table "${tableName}" not found in schema`);
     }
-
     const fields = Object.entries(schema[tableName])
         .map(([fieldName, fieldType]) => `${fieldName} ${fieldType}`)
         .join(', ');
-
     return `
         CREATE TABLE IF NOT EXISTS ${tableName} (
             ${fields}
@@ -56,7 +47,6 @@ exports.loginCenter = async (req, res) => {
         console.log("Ensuring pcregistration table exists");
         // Ensure pcregistration table exists
         const createTableQuery = generateCreateTableQuery('pcregistration');
-
         await connection.query(createTableQuery);
         console.log("pcregistration table ensured");
 
@@ -87,7 +77,7 @@ exports.loginCenter = async (req, res) => {
             console.log(`Comparing passwords - stored: '${decryptedStoredCenterPassStr}', provided: '${providedCenterPassStr}'`);
             if (decryptedStoredCenterPassStr === providedCenterPassStr) {
                 console.log("Passwords match");
-    
+
                 // Check if the PC is already registered
                 const checkPcQuery = generateCountQuery('pcregistration', { 
                     center: centerId, 
@@ -95,11 +85,11 @@ exports.loginCenter = async (req, res) => {
                     disk_id: diskIdentifier, 
                     mac_address: macAddress 
                 });
-    
+
                 console.log("Checking if the PC is already registered");
                 const [checkPcResults] = await connection.query(checkPcQuery, [centerId, ipAddress, diskIdentifier, macAddress]);
-                const pcExists = checkPcResults[0].count; // Change this line
-    
+                const pcExists = checkPcResults[0].count;
+
                 if (pcExists > 0) {
                     console.log("PC is already registered for the center");
                     res.status(403).send('This PC is already registered for the center');

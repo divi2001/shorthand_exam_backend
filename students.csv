@@ -1,4 +1,4 @@
-student_id,password,instituteId,batchNo,batchdate,fullname,subjectId,courseId,batch_year,loggedin,done,PHOTO,center_code,reporting_time,start_time,end_time,DAY,qset
+student_id,password,instituteId,batchNo,batchdate,fullname,subjectId,courseId,batch_year,loggedin,done,photo,center,reporting_time,start_time,end_time,day,qset
 1151500001,516529,11483,101,6/26/2024,BAGWE ANKITA PRASAD POOJA,[50],[11],June 2024 Exam,no,no,114833.JPG,1151,8:30 AM,9:00 AM,10:15 AM,1,4
 1151500002,336873,11619,101,6/26/2024,BANDE VAIBHAVI BHARAT SHILA,[50],[11],June 2024 Exam,no,no,1161937.JPG,1151,8:30 AM,9:00 AM,10:15 AM,1,1
 1151500003,613457,11483,101,6/26/2024,BHADARGE PRIYADARSHNEE DAYANAND REKHA,[50],[11],June 2024 Exam,no,no,1148310.JPG,1151,8:30 AM,9:00 AM,10:15 AM,1,2

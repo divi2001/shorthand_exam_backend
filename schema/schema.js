@@ -2,7 +2,7 @@
 const schema = {
     students: {
         student_id: 'BIGINT PRIMARY KEY',
-        password: 'VARCHAR(255)',
+        password: 'LONGTEXT',
         instituteId: 'BIGINT',
         batchNo: 'INT REFERENCES batchdb(batchNo)',
         batchdate: 'DATE',
@@ -66,6 +66,10 @@ const schema = {
         center_address: 'VARCHAR(255)',
         pc_count: 'INT',
         max_pc: 'INT',
+        attendanceroll: 'LONGTEXT',
+        absenteereport: 'LONGTEXT',
+        answersheet: 'LONGTEXT',
+        blankanswersheet: 'LONGTEXT'
         // district: 'VARCHAR(100)',
         // taluka: 'VARCHAR(100)',
         // it_teacher_name: 'VARCHAR(100)',
@@ -76,13 +80,13 @@ const schema = {
         // checklist: 'VARCHAR(255)',
     },
     controllerdb: {
-        controller_code: 'INT PRIMARY KEY',
         center: 'INT REFERENCES examcenterdb(center)',
         batchNo: 'INT REFERENCES batchdb(batchNo)',
+        controller_code: 'INT',
         controller_name: 'VARCHAR(100)',
-        controller_contact: 'VARCHAR(20)',
+        controller_contact: 'BIGINT',
         controller_email: 'VARCHAR(100)',
-        controller_pass: 'VARCHAR(255)',
+        controller_pass: 'LONGTEXT',
         district: 'VARCHAR(100)'
     },
     pcregistration: {

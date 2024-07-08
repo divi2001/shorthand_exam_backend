@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 import base64
 import csv
 import hashlib
+import datetime
+
 
 load_dotenv()
 
@@ -101,7 +103,8 @@ def ensure_table_exists(connection, schema, table_name):
     finally:
         cursor.close()
 
-def upload_center_data(csv_file, schema_file):
+
+def upload_data(csv_file, schema_file, table_name, encrypt_fields):
     schema = load_schema(schema_file)
     try:
         connection = mysql.connector.connect(
@@ -110,7 +113,6 @@ def upload_center_data(csv_file, schema_file):
             password=DB_PASSWORD,
             database=DB_DATABASE
         )
-        table_name = 'examcenterdb'
         ensure_table_exists(connection, schema, table_name)
 
         cursor = connection.cursor()
@@ -118,31 +120,76 @@ def upload_center_data(csv_file, schema_file):
         with open(csv_file, 'r') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                encrypted_centerpass = encrypt(row['centerpass'])
-                row['centerpass'] = encrypted_centerpass
+                for field in encrypt_fields:
+                    if field in row:
+                        row[field] = encrypt(row[field])
 
+                # Process all fields and convert data types as necessary
+                for field, value in row.items():
+                    if value and isinstance(value, str):
+                        # Remove square brackets if present
+                        if value.startswith('[') and value.endswith(']'):
+                            value = value[1:-1]
+
+                        # Get the field type from the schema
+                        field_type = schema.get(table_name, {}).get(field, '').lower()
+
+                        # Convert based on field type
+                        if field == 'batchdate' or field_type == 'date':
+                            try:
+                                date_obj = datetime.datetime.strptime(value, '%m/%d/%Y')
+                                row[field] = date_obj.strftime('%Y-%m-%d')
+                            except ValueError:
+                                print(f"Warning: Invalid date format for {field}: {value}")
+                                row[field] = None
+                        elif field_type == 'time':
+                            try:
+                                time_obj = datetime.datetime.strptime(value, '%I:%M %p')
+                                row[field] = time_obj.strftime('%H:%M:%S')
+                            except ValueError:
+                                print(f"Warning: Invalid time format for {field}: {value}")
+                                row[field] = None
+                        elif field_type in ['tinyint', 'bool', 'boolean']:
+                            if value.lower() in ['yes', 'no']:
+                                row[field] = 1 if value.lower() == 'yes' else 0
+                            elif value.isdigit():
+                                row[field] = int(value)
+                        elif field_type in ['int', 'integer', 'bigint']:
+                            if value.isdigit():
+                                row[field] = int(value)
+                            else:
+                                row[field] = None  # Convert non-digit and empty strings to None for integer fields
+                        else:
+                            row[field] = value
+                    elif value == '':
+                        field_type = schema.get(table_name, {}).get(field, '').lower()
+                        if field_type in ['int', 'integer', 'bigint']:
+                            row[field] = None  # Ensure empty strings are set to None for integer fields
+
+                columns = ', '.join(row.keys())
+                placeholders = ', '.join(['%s'] * len(row))
                 query = f"""
-                    INSERT INTO {table_name} (center, centerpass, center_name, center_address, pc_count, max_pc)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO {table_name} ({columns})
+                    VALUES ({placeholders})
                 """
-                values = (
-                    row['center'],
-                    row['centerpass'],
-                    row['center_name'],
-                    row['center_address'],
-                    row['pc_count'],
-                    row['max_pc']
-                )
+                values = tuple(row.values())
                 cursor.execute(query, values)
 
         connection.commit()
-        print('Center data uploaded and encrypted successfully')
+        print(f'Data uploaded and encrypted successfully for table: {table_name}')
     except mysql.connector.Error as error:
-        print('Error inserting center data:', error)
+        print(f'Error inserting data into {table_name}:', error)
     finally:
         if connection.is_connected():
             cursor.close()
             connection.close()
 
+# Usage examples:
 csv_file_path = 'examcenterdb.csv'
-upload_center_data(csv_file_path, SCHEMA_FILE)
+upload_data(csv_file_path, SCHEMA_FILE, 'examcenterdb', ['centerpass'])
+
+# csv_file_path = 'students.csv'
+# upload_data(csv_file_path, SCHEMA_FILE, 'students', ['password'])
+
+# csv_file_path = 'controllerdb.csv'
+# upload_data(csv_file_path, SCHEMA_FILE, 'controllerdb', ['controller_pass'])
